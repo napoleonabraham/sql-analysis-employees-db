@@ -1,5 +1,5 @@
 
-# 🧮 HR Analytics SQL Queries,The employees database.
+# 🧮 HR Analytics SQL Queries-The employees database.
 
 ## 📌 Overview
 
