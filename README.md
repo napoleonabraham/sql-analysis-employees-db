@@ -104,7 +104,7 @@ These queries are designed to extract valuable insights from employee databases,
 
 ## 🚀 How to Use
 
-1. Clone this repository  
+1. Clone this repository  https://github.com/napoleonabraham/sql-analysis-employees-db/blob/main/README.md
 2. Connect to your MySQL employee database  
 3. Execute any query file based on your need  
 4. Modify table/column names to match your schema  
