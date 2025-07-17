@@ -8,7 +8,7 @@ This project uses this dataset to perform **HR analytics** using SQL — extract
 
 ## 🧠 General Process of Business (HR) Analysis
 
-The SQL queries in this repository follow a structured **HR analytics pipeline**, including:
+The SQL queries in this repository follow a structured **HR analytics processes**, including:
 
 1. **Data Understanding**  
    - Familiarizing with table structures and relationships
