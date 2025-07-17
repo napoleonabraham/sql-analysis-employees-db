@@ -44,17 +44,5 @@ git clone https://github.com/datacharmer/test_db.git
 cd test_db
 mysql -u root -p < employees.sql
 
-# 🧮 HR Analytics SQL Queries-The employees database.
 
-## 📌 Overview
-
-This repository contains a comprehensive collection of **50 SQL queries** for **HR analytics**, organized by difficulty level:
-
-- ✅ Beginner (20)
-- 🟡 Intermediate (20)
-- 🔴 Advanced (10)
-
-These queries are designed to extract valuable insights from employee databases, covering metrics like **compensation analysis**, **workforce demographics**, **tenure patterns**, and **promotion trends**.
-
----
 
