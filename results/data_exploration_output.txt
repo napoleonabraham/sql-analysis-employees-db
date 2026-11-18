@@ -1,0 +1,152 @@
++----------------------+
+| Tables_in_employees  |
++----------------------+
+| current_dept_emp     |
+| departments          |
+| dept_emp             |
+| dept_emp_latest_date |
+| dept_manager         |
+| employees            |
+| salaries             |
+| titles               |
++----------------------+
++------------+---------------+------+-----+---------+-------+
+| Field      | Type          | Null | Key | Default | Extra |
++------------+---------------+------+-----+---------+-------+
+| emp_no     | int           | NO   | PRI | NULL    |       |
+| birth_date | date          | NO   |     | NULL    |       |
+| first_name | varchar(14)   | NO   |     | NULL    |       |
+| last_name  | varchar(16)   | NO   |     | NULL    |       |
+| gender     | enum('M','F') | NO   |     | NULL    |       |
+| hire_date  | date          | NO   |     | NULL    |       |
++------------+---------------+------+-----+---------+-------+
++-----------+-------------+------+-----+---------+-------+
+| Field     | Type        | Null | Key | Default | Extra |
++-----------+-------------+------+-----+---------+-------+
+| dept_no   | char(4)     | NO   | PRI | NULL    |       |
+| dept_name | varchar(40) | NO   | UNI | NULL    |       |
++-----------+-------------+------+-----+---------+-------+
++-----------+---------+------+-----+---------+-------+
+| Field     | Type    | Null | Key | Default | Extra |
++-----------+---------+------+-----+---------+-------+
+| emp_no    | int     | NO   | PRI | NULL    |       |
+| dept_no   | char(4) | NO   | PRI | NULL    |       |
+| from_date | date    | NO   |     | NULL    |       |
+| to_date   | date    | NO   |     | NULL    |       |
++-----------+---------+------+-----+---------+-------+
++-----------+---------+------+-----+---------+-------+
+| Field     | Type    | Null | Key | Default | Extra |
++-----------+---------+------+-----+---------+-------+
+| emp_no    | int     | NO   | PRI | NULL    |       |
+| dept_no   | char(4) | NO   | PRI | NULL    |       |
+| from_date | date    | NO   |     | NULL    |       |
+| to_date   | date    | NO   |     | NULL    |       |
++-----------+---------+------+-----+---------+-------+
++-----------+------+------+-----+---------+-------+
+| Field     | Type | Null | Key | Default | Extra |
++-----------+------+------+-----+---------+-------+
+| emp_no    | int  | NO   | PRI | NULL    |       |
+| salary    | int  | NO   |     | NULL    |       |
+| from_date | date | NO   | PRI | NULL    |       |
+| to_date   | date | NO   |     | NULL    |       |
++-----------+------+------+-----+---------+-------+
++-----------+-------------+------+-----+---------+-------+
+| Field     | Type        | Null | Key | Default | Extra |
++-----------+-------------+------+-----+---------+-------+
+| emp_no    | int         | NO   | PRI | NULL    |       |
+| title     | varchar(50) | NO   | PRI | NULL    |       |
+| from_date | date        | NO   | PRI | NULL    |       |
+| to_date   | date        | YES  |     | NULL    |       |
++-----------+-------------+------+-----+---------+-------+
++--------------+--------------+
+| table_name   | record_count |
++--------------+--------------+
+| employees    |       300024 |
+| departments  |            9 |
+| dept_emp     |       331603 |
+| dept_manager |           24 |
+| salaries     |      2844047 |
+| titles       |       443308 |
++--------------+--------------+
++---------------+-------------+-------------------+
+| earliest_hire | latest_hire | hiring_span_years |
++---------------+-------------+-------------------+
+| 1985-01-01    | 2000-01-28  |              15.1 |
++---------------+-------------+-------------------+
++------------+-----------------+--------------------+
+| table_name | current_records | latest_closed_date |
++------------+-----------------+--------------------+
+| dept_emp   |          240124 | 2002-08-01         |
+| salaries   |          240124 | 2002-08-01         |
+| titles     |          240124 | 2002-08-01         |
++------------+-----------------+--------------------+
++---------------+
+| snapshot_date |
++---------------+
+| 2002-08-01    |
++---------------+
++------------------+----------------+-----------------+
+| youngest_at_hire | oldest_at_hire | avg_age_at_hire |
++------------------+----------------+-----------------+
+|               20 |             47 |            31.0 |
++------------------+----------------+-----------------+
++-------------+---------+------------+------------+------------+
+| salary_year | records | min_salary | avg_salary | max_salary |
++-------------+---------+------------+------------+------------+
+|        1985 |   18293 |      40000 |      53182 |     123668 |
+|        1986 |   37957 |      39500 |      54085 |     126169 |
+|        1987 |   57440 |      39031 |      54960 |     129434 |
+|        1988 |   76896 |      38888 |      55862 |     132511 |
+|        1989 |   95957 |      38836 |      56841 |     132196 |
+|        1990 |  114561 |      38851 |      57839 |     134572 |
+|        1991 |  132624 |      39115 |      58804 |     134624 |
+|        1992 |  151072 |      39020 |      59759 |     138817 |
+|        1993 |  168139 |      38849 |      60754 |     140625 |
+|        1994 |  185159 |      39018 |      61728 |     143182 |
+|        1995 |  201637 |      38859 |      62681 |     146531 |
+|        1996 |  218309 |      38735 |      63619 |     149208 |
+|        1997 |  233190 |      39057 |      64565 |     149675 |
+|        1998 |  247489 |      39075 |      65540 |     151484 |
+|        1999 |  260957 |      38990 |      66525 |     154885 |
+|        2000 |  255785 |      38916 |      68556 |     155377 |
+|        2001 |  247652 |      38812 |      70695 |     157821 |
+|        2002 |  140930 |      38623 |      72684 |     158220 |
++-------------+---------+------------+------------+------------+
++--------------------+---------+
+| title              | records |
++--------------------+---------+
+| Engineer           |  115003 |
+| Staff              |  107391 |
+| Senior Engineer    |   97750 |
+| Senior Staff       |   92853 |
+| Technique Leader   |   15159 |
+| Assistant Engineer |   15128 |
+| Manager            |      24 |
++--------------------+---------+
++-----------------------------+----------------------------+---------------------------+
+| salary_records_per_employee | title_records_per_employee | dept_records_per_employee |
++-----------------------------+----------------------------+---------------------------+
+|                        9.48 |                       1.48 |                      1.11 |
++-----------------------------+----------------------------+---------------------------+
++--------------------------------------------------------+----------------+
+| check_name                                             | problems_found |
++--------------------------------------------------------+----------------+
+| Missing birth, hire date or name                       |              0 |
+| Hired before age 16                                    |              0 |
+| Duplicate employees (same name, birth date, hire date) |              0 |
+| Employees without any salary record                    |              0 |
+| Employees without any title record                     |              0 |
+| Employees without any department record                |              0 |
+| Employees with more than one current department        |              0 |
+| Employees with more than one current salary            |              0 |
+| Current department but no current salary               |              0 |
+| Current salary but no current department               |              0 |
+| Salary records with from_date after to_date            |              0 |
+| Title records with from_date after to_date             |              0 |
+| Department records with from_date after to_date        |              0 |
+| Salary records dated before the hire date              |              0 |
+| Department records dated before the hire date          |              0 |
+| Zero or negative salaries                              |              0 |
+| Blank job titles                                       |              0 |
+| Departments with no current manager                    |              0 |
++--------------------------------------------------------+----------------+
