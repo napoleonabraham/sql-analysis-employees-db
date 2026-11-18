@@ -1,475 +1,319 @@
+/* ============================================================
+   HR ANALYTICS QUERIES
+   Database : MySQL Employees Sample Database (test_db)
+   Requires : MySQL 8.0+ (CTEs and window functions)
+
+   Conventions
+   - A record is "current" when to_date = '9999-01-01'.
+   - An employee is current when they have a current dept_emp row.
+   - Tenure is measured to @as_of, the snapshot date of the data,
+     not to today's date.
+   ============================================================ */
+
 USE employees;
--- ✅ BEGINNER-LEVEL QUERIES (20)
 
--- 1. How many employees are currently in the company?
-SELECT COUNT(*) AS total_employees FROM employees;
+SET @as_of = (SELECT MAX(from_date) FROM salaries);   -- 2002-08-01
 
--- 2. What is the gender distribution of the workforce?
-SELECT gender, COUNT(*) AS count FROM employees GROUP BY gender;
 
--- 3. How many departments are in the company?
-SELECT COUNT(*) AS total_departments FROM departments;
+/* ------------------------------------------------------------
+   A. WORKFORCE OVERVIEW
+   ------------------------------------------------------------ */
 
--- 4. What are the names of all departments?
-SELECT dept_name FROM departments ORDER BY dept_name;
+-- 1. How many employees were ever hired, how many are still employed,
+--    and how many have left?
+WITH emp_status AS (
+    SELECT e.emp_no,
+           MAX(de.to_date = '9999-01-01') AS is_current
+    FROM employees e
+    JOIN dept_emp de ON de.emp_no = e.emp_no
+    GROUP BY e.emp_no
+)
+SELECT
+    COUNT(*)                                    AS ever_hired,
+    SUM(is_current)                             AS current_employees,
+    COUNT(*) - SUM(is_current)                  AS former_employees,
+    ROUND(100 * (1 - AVG(is_current)), 1)       AS pct_left
+FROM emp_status;
 
--- 5. How many employees work in each department?
-SELECT d.dept_name, COUNT(de.emp_no) AS employee_count
+-- 2. How many current employees work in each department?
+SELECT
+    d.dept_name,
+    COUNT(*) AS employees,
+    ROUND(100 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pct_of_workforce
 FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-WHERE de.to_date > CURDATE()
+JOIN dept_emp de ON de.dept_no = d.dept_no
+WHERE de.to_date = '9999-01-01'
 GROUP BY d.dept_name
-ORDER BY employee_count DESC;
+ORDER BY employees DESC;
 
--- 6. What are the unique job titles in the company?
-SELECT DISTINCT title FROM titles ORDER BY title;
-
--- 7. How many employees were hired each year?
+-- 3. How many employees were hired each year?
 SELECT YEAR(hire_date) AS hire_year, COUNT(*) AS employees_hired
 FROM employees
 GROUP BY hire_year
 ORDER BY hire_year;
 
--- 8. Who are the most recently hired employees?
-SELECT emp_no, first_name, last_name, hire_date
-FROM employees
-ORDER BY hire_date DESC
-LIMIT 10;
 
--- 9. Who were the first employees ever hired?
-SELECT emp_no, first_name, last_name, hire_date
-FROM employees
-ORDER BY hire_date ASC
-LIMIT 10;
+/* ------------------------------------------------------------
+   B. WORKFORCE DEMOGRAPHICS
+   ------------------------------------------------------------ */
 
--- 10. How many employees have held a manager position?
-SELECT COUNT(DISTINCT emp_no) AS manager_count FROM dept_manager;
-
--- 11. What is the salary range in the company?
-SELECT MIN(salary) AS min_salary, MAX(salary) AS max_salary
-FROM salaries
-WHERE to_date > CURDATE();
-
--- 12. Which job titles are most common?
-SELECT title, COUNT(*) AS count
-FROM titles
-WHERE to_date > CURDATE()
-GROUP BY title
-ORDER BY count DESC;
-
--- 13. What are the top 5 most common first names?
-SELECT first_name, COUNT(*) AS count
-FROM employees
-GROUP BY first_name
-ORDER BY count DESC
-LIMIT 5;
-
--- 14. What are the top 5 most common last names?
-SELECT last_name, COUNT(*) AS count
-FROM employees
-GROUP BY last_name
-ORDER BY count DESC
-LIMIT 5;
-
--- 15. How many male vs female engineers are there?
-SELECT e.gender, COUNT(*) AS count
-FROM employees e
-JOIN titles t ON e.emp_no = t.emp_no
-WHERE t.title = 'Engineer' AND t.to_date > CURDATE()
-GROUP BY e.gender;
-
--- 16. What is the average salary by gender?
-SELECT e.gender, AVG(s.salary) AS avg_salary
-FROM employees e
-JOIN salaries s ON e.emp_no = s.emp_no
-WHERE s.to_date > CURDATE()
-GROUP BY e.gender;
-
--- 17. What are the department codes and names?
-SELECT dept_no, dept_name FROM departments ORDER BY dept_no;
-
--- 18. How many departments has each employee worked in?
-SELECT e.emp_no, CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
-       COUNT(DISTINCT de.dept_no) AS dept_count
-FROM employees e
-JOIN dept_emp de ON e.emp_no = de.emp_no
-GROUP BY e.emp_no, employee_name
-HAVING COUNT(DISTINCT de.dept_no) > 1
-ORDER BY dept_count DESC;
-
--- 19. How many employees have held more than one title?
-SELECT COUNT(*) AS employees_with_multiple_titles
-FROM (
-    SELECT emp_no
-    FROM titles
-    GROUP BY emp_no
-    HAVING COUNT(DISTINCT title) > 1
-) AS multi_title_employees;
-
--- 20. What is the distribution of employees by job title?
-SELECT t.title, COUNT(*) AS employee_count
-FROM titles t
-WHERE t.to_date > CURDATE()
-GROUP BY t.title
-ORDER BY employee_count DESC;
-
-
--- 🟡 INTERMEDIATE-LEVEL QUERIES (20)
-
--- 1. What is the company-wide average salary?
-SELECT AVG(salary) AS company_avg_salary
-FROM salaries
-WHERE to_date > CURDATE();
-
--- 2. What is the average salary by department?
-SELECT d.dept_name, AVG(s.salary) AS avg_salary
+-- 4. What is the gender split of the current workforce, by department?
+SELECT
+    IF(GROUPING(d.dept_name), 'All departments', d.dept_name) AS department,
+    SUM(e.gender = 'M') AS men,
+    SUM(e.gender = 'F') AS women,
+    ROUND(100 * AVG(e.gender = 'F'), 1) AS pct_women
 FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-JOIN salaries s ON de.emp_no = s.emp_no
-WHERE de.to_date > CURDATE() AND s.to_date > CURDATE()
+JOIN dept_emp de ON de.dept_no = d.dept_no AND de.to_date = '9999-01-01'
+JOIN employees e ON e.emp_no = de.emp_no
+GROUP BY d.dept_name WITH ROLLUP;
+
+-- 5. How are current employees distributed across job titles?
+SELECT
+    t.title,
+    COUNT(*) AS employees,
+    ROUND(100 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pct_of_workforce
+FROM titles t
+WHERE t.to_date = '9999-01-01'
+GROUP BY t.title
+ORDER BY employees DESC;
+
+-- 6. What is the average tenure of current employees, by department?
+SELECT
+    IF(GROUPING(d.dept_name), 'All departments', d.dept_name) AS department,
+    ROUND(AVG(TIMESTAMPDIFF(MONTH, e.hire_date, @as_of)) / 12, 1) AS avg_tenure_years,
+    ROUND(MIN(TIMESTAMPDIFF(MONTH, e.hire_date, @as_of)) / 12, 1) AS min_tenure_years,
+    ROUND(MAX(TIMESTAMPDIFF(MONTH, e.hire_date, @as_of)) / 12, 1) AS max_tenure_years
+FROM departments d
+JOIN dept_emp de ON de.dept_no = d.dept_no AND de.to_date = '9999-01-01'
+JOIN employees e ON e.emp_no = de.emp_no
+GROUP BY d.dept_name WITH ROLLUP
+ORDER BY avg_tenure_years DESC;
+
+
+/* ------------------------------------------------------------
+   C. COMPENSATION
+   ------------------------------------------------------------ */
+
+-- 7. What are the average salary, salary range and total payroll
+--    of each department?
+SELECT
+    d.dept_name,
+    COUNT(*)                          AS employees,
+    ROUND(AVG(s.salary))              AS avg_salary,
+    MIN(s.salary)                     AS min_salary,
+    MAX(s.salary)                     AS max_salary,
+    ROUND(SUM(s.salary) / 1e6, 1)     AS annual_payroll_millions
+FROM departments d
+JOIN dept_emp de ON de.dept_no = d.dept_no AND de.to_date = '9999-01-01'
+JOIN salaries s  ON s.emp_no = de.emp_no   AND s.to_date  = '9999-01-01'
 GROUP BY d.dept_name
 ORDER BY avg_salary DESC;
 
--- 3. What is the total salary expense per department?
-SELECT d.dept_name, SUM(s.salary) AS total_salary_expense
-FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-JOIN salaries s ON de.emp_no = s.emp_no
-WHERE de.to_date > CURDATE() AND s.to_date > CURDATE()
-GROUP BY d.dept_name
-ORDER BY total_salary_expense DESC;
-
--- 4. How many managers are there in each department?
-SELECT d.dept_name, COUNT(DISTINCT dm.emp_no) AS manager_count
-FROM departments d
-JOIN dept_manager dm ON d.dept_no = dm.dept_no
-WHERE dm.to_date > CURDATE()
-GROUP BY d.dept_name
-ORDER BY manager_count DESC;
-
--- 5. Who are the top 5 highest-paid employees?
-SELECT e.emp_no, e.first_name, e.last_name, s.salary
-FROM employees e
-JOIN salaries s ON e.emp_no = s.emp_no
-WHERE s.to_date > CURDATE()
-ORDER BY s.salary DESC
-LIMIT 5;
-
--- 6. How many employees have received promotions?
-SELECT COUNT(DISTINCT emp_no) AS promoted_employees
-FROM (
-    SELECT emp_no, COUNT(DISTINCT title) AS title_count
-    FROM titles
-    GROUP BY emp_no
-    HAVING title_count > 1
-) AS promotions;
-
--- 7. What is the average tenure of employees in years?
-SELECT AVG(DATEDIFF(CURDATE(), hire_date)/365 AS avg_tenure_years
-FROM employees;
-
--- 8. Which year had the highest number of hires?
-SELECT YEAR(hire_date) AS hire_year, COUNT(*) AS hires
-FROM employees
-GROUP BY hire_year
-ORDER BY hires DESC
-LIMIT 1;
-
--- 9. Which department has the most employees?
-SELECT d.dept_name, COUNT(*) AS employee_count
-FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-WHERE de.to_date > CURDATE()
-GROUP BY d.dept_name
-ORDER BY employee_count DESC
-LIMIT 1;
-
--- 10. What is the gender distribution within each department?
-SELECT d.dept_name, e.gender, COUNT(*) AS count
-FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-JOIN employees e ON de.emp_no = e.emp_no
-WHERE de.to_date > CURDATE()
-GROUP BY d.dept_name, e.gender
-ORDER BY d.dept_name, e.gender;
-
--- 11. Which employees were ever promoted to manager?
-SELECT DISTINCT e.emp_no, e.first_name, e.last_name
-FROM employees e
-JOIN dept_manager dm ON e.emp_no = dm.emp_no;
-
--- 12. Which employees were never managers?
-SELECT e.emp_no, e.first_name, e.last_name
-FROM employees e
-WHERE e.emp_no NOT IN (SELECT DISTINCT emp_no FROM dept_manager);
-
--- 13. Which department has the highest average tenure?
-SELECT d.dept_name, AVG(DATEDIFF(CURDATE(), e.hire_date)/365 AS avg_tenure_years
-FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-JOIN employees e ON de.emp_no = e.emp_no
-WHERE de.to_date > CURDATE()
-GROUP BY d.dept_name
-ORDER BY avg_tenure_years DESC
-LIMIT 1;
-
--- 14. How many employees were hired before 1990?
-SELECT COUNT(*) AS employees_hired_before_1990
-FROM employees
-WHERE hire_date < '1990-01-01';
-
--- 15. What are the top 5 departments by average salary?
-SELECT d.dept_name, AVG(s.salary) AS avg_salary
-FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-JOIN salaries s ON de.emp_no = s.emp_no
-WHERE de.to_date > CURDATE() AND s.to_date > CURDATE()
-GROUP BY d.dept_name
-ORDER BY avg_salary DESC
-LIMIT 5;
-
--- 16. Which job title has the highest average salary?
-SELECT t.title, AVG(s.salary) AS avg_salary
+-- 8. What is the average salary for each job title?
+SELECT
+    t.title,
+    COUNT(*)             AS employees,
+    ROUND(AVG(s.salary)) AS avg_salary
 FROM titles t
-JOIN salaries s ON t.emp_no = s.emp_no
-WHERE t.to_date > CURDATE() AND s.to_date > CURDATE()
+JOIN salaries s ON s.emp_no = t.emp_no AND s.to_date = '9999-01-01'
+WHERE t.to_date = '9999-01-01'
 GROUP BY t.title
-ORDER BY avg_salary DESC
-LIMIT 1;
+ORDER BY avg_salary DESC;
 
--- 17. What is the gender distribution across job titles?
-SELECT t.title, e.gender, COUNT(*) AS count
-FROM titles t
-JOIN employees e ON t.emp_no = e.emp_no
-WHERE t.to_date > CURDATE()
-GROUP BY t.title, e.gender
-ORDER BY t.title, e.gender;
+-- 9. How large is the gender pay gap in each department?
+--    A positive gap means men are paid more on average.
+SELECT
+    IF(GROUPING(d.dept_name), 'All departments', d.dept_name) AS department,
+    ROUND(AVG(CASE WHEN e.gender = 'M' THEN s.salary END)) AS avg_salary_men,
+    ROUND(AVG(CASE WHEN e.gender = 'F' THEN s.salary END)) AS avg_salary_women,
+    ROUND(AVG(CASE WHEN e.gender = 'M' THEN s.salary END)
+        - AVG(CASE WHEN e.gender = 'F' THEN s.salary END)) AS gap,
+    ROUND(100 * (AVG(CASE WHEN e.gender = 'M' THEN s.salary END)
+               / AVG(CASE WHEN e.gender = 'F' THEN s.salary END) - 1), 2) AS gap_pct
+FROM departments d
+JOIN dept_emp de ON de.dept_no = d.dept_no AND de.to_date = '9999-01-01'
+JOIN employees e ON e.emp_no = de.emp_no
+JOIN salaries s  ON s.emp_no = e.emp_no    AND s.to_date  = '9999-01-01'
+GROUP BY d.dept_name WITH ROLLUP
+ORDER BY gap DESC;
 
--- 18. How many employees have switched departments?
-SELECT COUNT(DISTINCT emp_no) AS employees_switched_depts
-FROM (
-    SELECT emp_no
-    FROM dept_emp
-    GROUP BY emp_no
-    HAVING COUNT(DISTINCT dept_no) > 1
-) AS dept_switchers;
-
--- 19. What is the total salary paid to all managers?
-SELECT SUM(s.salary) AS total_manager_salary
-FROM dept_manager dm
-JOIN salaries s ON dm.emp_no = s.emp_no
-WHERE dm.to_date > CURDATE() AND s.to_date > CURDATE();
-
--- 20. Who worked in both multiple titles and departments?
-SELECT e.emp_no, e.first_name, e.last_name
-FROM employees e
-WHERE e.emp_no IN (
-    SELECT emp_no
-    FROM titles
-    GROUP BY emp_no
-    HAVING COUNT(DISTINCT title) > 1
-) AND e.emp_no IN (
-    SELECT emp_no
-    FROM dept_emp
-    GROUP BY emp_no
-    HAVING COUNT(DISTINCT dept_no) > 1
-);
-
-
--- 🔴 ADVANCED-LEVEL QUERIES (10)
-
--- 1. Which employees earn more than their department's average salary?
-WITH dept_avg AS (
-    SELECT d.dept_no, AVG(s.salary) AS avg_salary
-    FROM departments d
-    JOIN dept_emp de ON d.dept_no = de.dept_no
-    JOIN salaries s ON de.emp_no = s.emp_no
-    WHERE de.to_date > CURDATE() AND s.to_date > CURDATE()
-    GROUP BY d.dept_no
-)
-SELECT e.emp_no, e.first_name, e.last_name, d.dept_name, s.salary, da.avg_salary
-FROM employees e
-JOIN salaries s ON e.emp_no = s.emp_no AND s.to_date > CURDATE()
-JOIN dept_emp de ON e.emp_no = de.emp_no AND de.to_date > CURDATE()
-JOIN departments d ON de.dept_no = d.dept_no
-JOIN dept_avg da ON d.dept_no = da.dept_no
-WHERE s.salary > da.avg_salary
-ORDER BY (s.salary - da.avg_salary) DESC;
-
--- 2. Who is the longest-tenured employee in each department?
-WITH dept_tenure AS (
-    SELECT 
-        d.dept_no,
+-- 10. Who are the three highest-paid employees in each department?
+WITH ranked AS (
+    SELECT
         d.dept_name,
         e.emp_no,
-        e.first_name,
-        e.last_name,
-        e.hire_date,
-        DATEDIFF(CURDATE(), e.hire_date) AS tenure_days,
-        RANK() OVER (PARTITION BY d.dept_no ORDER BY e.hire_date ASC) AS tenure_rank
-    FROM employees e
-    JOIN dept_emp de ON e.emp_no = de.emp_no AND de.to_date > CURDATE()
-    JOIN departments d ON de.dept_no = d.dept_no
-)
-SELECT dept_no, dept_name, emp_no, first_name, last_name, hire_date, tenure_days
-FROM dept_tenure
-WHERE tenure_rank = 1
-ORDER BY tenure_days DESC;
-
--- 3. What is the percentage growth in salary per employee?
-WITH salary_changes AS (
-    SELECT 
-        emp_no,
-        FIRST_VALUE(salary) OVER (PARTITION BY emp_no ORDER BY from_date) AS first_salary,
-        LAST_VALUE(salary) OVER (PARTITION BY emp_no ORDER BY from_date 
-                             RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS current_salary
-    FROM salaries
-)
-SELECT 
-    e.emp_no, 
-    e.first_name, 
-    e.last_name,
-    sc.first_salary,
-    sc.current_salary,
-    ROUND(((sc.current_salary - sc.first_salary) / sc.first_salary * 100), 2) AS pct_growth
-FROM employees e
-JOIN salary_changes sc ON e.emp_no = sc.emp_no
-WHERE sc.current_salary > 0
-ORDER BY pct_growth DESC;
-
--- 4. Which employees had the most title changes (promotions)?
-SELECT e.emp_no, e.first_name, e.last_name, COUNT(t.title) - 1 AS promotion_count
-FROM employees e
-JOIN titles t ON e.emp_no = t.emp_no
-GROUP BY e.emp_no, e.first_name, e.last_name
-HAVING COUNT(t.title) > 1
-ORDER BY promotion_count DESC
-LIMIT 10;
-
--- 5. Which department has the largest gender salary gap?
-WITH gender_salaries AS (
-    SELECT 
-        d.dept_no,
-        d.dept_name,
-        e.gender,
-        AVG(s.salary) AS avg_salary
+        CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+        s.salary,
+        DENSE_RANK() OVER (PARTITION BY d.dept_no ORDER BY s.salary DESC) AS salary_rank
     FROM departments d
-    JOIN dept_emp de ON d.dept_no = de.dept_no
-    JOIN employees e ON de.emp_no = e.emp_no
-    JOIN salaries s ON e.emp_no = s.emp_no
-    WHERE de.to_date > CURDATE() AND s.to_date > CURDATE()
-    GROUP BY d.dept_no, d.dept_name, e.gender
-),
-gender_gaps AS (
-    SELECT 
-        gs1.dept_no,
-        gs1.dept_name,
-        ABS(gs1.avg_salary - gs2.avg_salary) AS salary_gap
-    FROM gender_salaries gs1
-    JOIN gender_salaries gs2 ON gs1.dept_no = gs2.dept_no
-    WHERE gs1.gender = 'M' AND gs2.gender = 'F'
+    JOIN dept_emp de ON de.dept_no = d.dept_no AND de.to_date = '9999-01-01'
+    JOIN employees e ON e.emp_no = de.emp_no
+    JOIN salaries s  ON s.emp_no = e.emp_no    AND s.to_date  = '9999-01-01'
 )
-SELECT dept_no, dept_name, salary_gap
-FROM gender_gaps
-ORDER BY salary_gap DESC
-LIMIT 1;
+SELECT dept_name, salary_rank, emp_no, employee_name, salary
+FROM ranked
+WHERE salary_rank <= 3
+ORDER BY dept_name, salary_rank;
 
--- 6. Which departments have the widest salary range?
-SELECT 
-    d.dept_no,
+-- 11. How does each department manager's salary compare with
+--     the average salary of the department they run?
+WITH dept_avg AS (
+    SELECT de.dept_no, AVG(s.salary) AS avg_salary
+    FROM dept_emp de
+    JOIN salaries s ON s.emp_no = de.emp_no AND s.to_date = '9999-01-01'
+    WHERE de.to_date = '9999-01-01'
+    GROUP BY de.dept_no
+)
+SELECT
     d.dept_name,
-    MIN(s.salary) AS min_salary,
-    MAX(s.salary) AS max_salary,
-    MAX(s.salary) - MIN(s.salary) AS salary_range
-FROM departments d
-JOIN dept_emp de ON d.dept_no = de.dept_no
-JOIN salaries s ON de.emp_no = s.emp_no
-WHERE de.to_date > CURDATE() AND s.to_date > CURDATE()
-GROUP BY d.dept_no, d.dept_name
-ORDER BY salary_range DESC;
+    CONCAT(e.first_name, ' ', e.last_name) AS manager,
+    s.salary                               AS manager_salary,
+    ROUND(da.avg_salary)                   AS dept_avg_salary,
+    ROUND(s.salary / da.avg_salary, 2)     AS ratio_to_dept_avg
+FROM dept_manager dm
+JOIN departments d ON d.dept_no = dm.dept_no
+JOIN employees e   ON e.emp_no  = dm.emp_no
+JOIN salaries s    ON s.emp_no  = dm.emp_no AND s.to_date = '9999-01-01'
+JOIN dept_avg da   ON da.dept_no = dm.dept_no
+WHERE dm.to_date = '9999-01-01'
+ORDER BY ratio_to_dept_avg DESC;
 
--- 7. What is the correlation between tenure and salary?
-SELECT 
-    (COUNT(*) * SUM(xy) - SUM(x) * SUM(y)) / 
-    (SQRT(COUNT(*) * SUM(x2) - SUM(x) * SUM(x)) * SQRT(COUNT(*) * SUM(y2) - SUM(y) * SUM(y))) 
-    AS correlation
-FROM (
-    SELECT 
-        DATEDIFF(CURDATE(), e.hire_date) AS x,
-        s.salary AS y,
-        DATEDIFF(CURDATE(), e.hire_date) * DATEDIFF(CURDATE(), e.hire_date) AS x2,
-        s.salary * s.salary AS y2,
-        DATEDIFF(CURDATE(), e.hire_date) * s.salary AS xy
-    FROM employees e
-    JOIN salaries s ON e.emp_no = s.emp_no
-    WHERE s.to_date > CURDATE()
-) AS stats;
-
--- 8. What is the average promotion frequency by department?
-WITH promotion_counts AS (
-    SELECT 
-        de.dept_no,
-        d.dept_name,
-        t.emp_no,
-        COUNT(t.title) - 1 AS promotion_count
-    FROM titles t
-    JOIN dept_emp de ON t.emp_no = de.emp_no
-    JOIN departments d ON de.dept_no = d.dept_no
-    WHERE de.to_date > CURDATE()
-    GROUP BY de.dept_no, d.dept_name, t.emp_no
-    HAVING COUNT(t.title) > 1
+-- 12. How much have salaries grown from each current employee's
+--     starting salary to their current salary?
+WITH first_last AS (
+    SELECT DISTINCT
+        emp_no,
+        FIRST_VALUE(salary) OVER w AS first_salary,
+        LAST_VALUE(salary)  OVER w AS current_salary,
+        LAST_VALUE(to_date) OVER w AS last_to_date
+    FROM salaries
+    WINDOW w AS (PARTITION BY emp_no ORDER BY from_date
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
 )
-SELECT 
-    dept_no,
-    dept_name,
-    AVG(promotion_count) AS avg_promotions,
-    COUNT(emp_no) AS promoted_employees
-FROM promotion_counts
-GROUP BY dept_no, dept_name
-ORDER BY avg_promotions DESC;
+SELECT
+    COUNT(*)                                                        AS current_employees,
+    ROUND(AVG(first_salary))                                        AS avg_starting_salary,
+    ROUND(AVG(current_salary))                                      AS avg_current_salary,
+    ROUND(AVG(100 * (current_salary - first_salary) / first_salary), 1) AS avg_growth_pct,
+    ROUND(MAX(100 * (current_salary - first_salary) / first_salary), 1) AS max_growth_pct,
+    SUM(current_salary < first_salary)                              AS employees_paid_less_than_at_start
+FROM first_last
+WHERE last_to_date = '9999-01-01';
 
--- 9. Which job title sees the highest turnover?
-WITH title_changes AS (
-    SELECT 
-        title,
-        COUNT(*) AS total_holders,
-        COUNT(DISTINCT emp_no) AS unique_holders,
-        COUNT(*) / COUNT(DISTINCT emp_no) AS avg_times_held
-    FROM titles
-    GROUP BY title
+-- 13. How did the average salary change from year to year?
+WITH yearly AS (
+    SELECT YEAR(from_date) AS salary_year, AVG(salary) AS avg_salary
+    FROM salaries
+    GROUP BY YEAR(from_date)
 )
-SELECT 
-    title,
-    total_holders,
-    unique_holders,
-    avg_times_held,
-    (total_holders - unique_holders) AS turnover_count
-FROM title_changes
-ORDER BY turnover_count DESC
-LIMIT 1;
-
--- 10. Which year had the largest salary increase across the company?
-WITH yearly_salaries AS (
-    SELECT 
-        YEAR(s.from_date) AS salary_year,
-        AVG(s.salary) AS avg_salary
-    FROM salaries s
-    GROUP BY salary_year
-),
-salary_changes AS (
-    SELECT 
-        salary_year,
-        avg_salary,
-        LAG(avg_salary) OVER (ORDER BY salary_year) AS prev_avg_salary,
-        avg_salary - LAG(avg_salary) OVER (ORDER BY salary_year) AS salary_increase
-    FROM yearly_salaries
-)
-SELECT 
+SELECT
     salary_year,
-    avg_salary,
-    prev_avg_salary,
-    salary_increase
-FROM salary_changes
-WHERE salary_increase IS NOT NULL
-ORDER BY salary_increase DESC
-LIMIT 1;
+    ROUND(avg_salary) AS avg_salary,
+    ROUND(avg_salary - LAG(avg_salary) OVER (ORDER BY salary_year)) AS change_vs_prior_year,
+    ROUND(100 * (avg_salary / LAG(avg_salary) OVER (ORDER BY salary_year) - 1), 2) AS pct_change
+FROM yearly
+ORDER BY salary_year;
+
+-- 14. Is salary related to tenure? Pearson correlation between
+--     tenure and current salary for current employees.
+WITH pts AS (
+    SELECT
+        TIMESTAMPDIFF(MONTH, e.hire_date, @as_of) / 12 AS x,
+        s.salary AS y
+    FROM employees e
+    JOIN salaries s ON s.emp_no = e.emp_no AND s.to_date = '9999-01-01'
+)
+SELECT
+    COUNT(*) AS employees,
+    ROUND(
+        (COUNT(*) * SUM(x * y) - SUM(x) * SUM(y)) /
+        (SQRT(COUNT(*) * SUM(x * x) - SUM(x) * SUM(x)) *
+         SQRT(COUNT(*) * SUM(y * y) - SUM(y) * SUM(y))), 3) AS tenure_salary_correlation
+FROM pts;
+
+
+/* ------------------------------------------------------------
+   D. CAREER PROGRESSION AND RETENTION
+   ------------------------------------------------------------ */
+
+-- 15. How many titles has each employee held?
+SELECT
+    titles_held,
+    COUNT(*) AS employees,
+    ROUND(100 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) AS pct_of_employees
+FROM (
+    SELECT emp_no, COUNT(*) AS titles_held
+    FROM titles
+    GROUP BY emp_no
+) AS per_employee
+GROUP BY titles_held
+ORDER BY titles_held;
+
+-- 16. What are the most common title changes, and how long do
+--     employees stay in a title before moving to the next one?
+WITH moves AS (
+    SELECT
+        emp_no,
+        title AS from_title,
+        LEAD(title)     OVER (PARTITION BY emp_no ORDER BY from_date) AS to_title,
+        from_date,
+        LEAD(from_date) OVER (PARTITION BY emp_no ORDER BY from_date) AS next_from_date
+    FROM titles
+)
+SELECT
+    from_title,
+    to_title,
+    COUNT(*) AS employees,
+    ROUND(AVG(TIMESTAMPDIFF(MONTH, from_date, next_from_date)) / 12, 1) AS avg_years_before_change
+FROM moves
+WHERE to_title IS NOT NULL
+GROUP BY from_title, to_title
+ORDER BY employees DESC;
+
+-- 17. How many employees have changed department?
+SELECT
+    COUNT(*)                                  AS employees,
+    SUM(depts > 1)                            AS changed_department,
+    ROUND(100 * AVG(depts > 1), 1)            AS pct_changed_department
+FROM (
+    SELECT emp_no, COUNT(DISTINCT dept_no) AS depts
+    FROM dept_emp
+    GROUP BY emp_no
+) AS per_employee;
+
+-- 18. What share of the people who worked in each department have
+--     left the company, and how long did leavers stay?
+WITH last_assignment AS (
+    SELECT
+        de.emp_no,
+        de.dept_no,
+        de.to_date,
+        ROW_NUMBER() OVER (PARTITION BY de.emp_no ORDER BY de.to_date DESC, de.from_date DESC) AS rn
+    FROM dept_emp de
+)
+SELECT
+    IF(GROUPING(d.dept_name), 'All departments', d.dept_name) AS department,
+    COUNT(*)                                        AS employees_last_in_dept,
+    SUM(la.to_date < '9999-01-01')                  AS left_company,
+    ROUND(100 * AVG(la.to_date < '9999-01-01'), 1)  AS pct_left,
+    ROUND(AVG(CASE WHEN la.to_date < '9999-01-01'
+                   THEN TIMESTAMPDIFF(MONTH, e.hire_date, la.to_date) END) / 12, 1) AS avg_years_before_leaving
+FROM last_assignment la
+JOIN departments d ON d.dept_no = la.dept_no
+JOIN employees e   ON e.emp_no  = la.emp_no
+WHERE la.rn = 1
+GROUP BY d.dept_name WITH ROLLUP
+ORDER BY pct_left DESC;
+
+-- 19. How many employees left in each year?
+WITH last_day AS (
+    SELECT emp_no, MAX(to_date) AS leave_date
+    FROM dept_emp
+    GROUP BY emp_no
+    HAVING MAX(to_date) < '9999-01-01'
+)
+SELECT YEAR(leave_date) AS leave_year, COUNT(*) AS employees_left
+FROM last_day
+GROUP BY leave_year
+ORDER BY leave_year;
